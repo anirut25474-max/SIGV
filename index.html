@@ -3,14 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BTS Point Machine — Central Monitor</title>
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <title>BTS Point Machine — Firebase Monitor</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:Consolas,'Courier New',monospace;background:#f0f0f0;font-size:12px;color:#222}
     .header{background:#1a1a2e;color:#eee;padding:10px 20px;display:flex;align-items:center;justify-content:space-between}
-    .header h1{font-size:15px;font-weight:bold}
-    .header .sub{font-size:11px;color:#888}
+    .header h1{font-size:15px;font-weight:bold;color:#f39c12}
+    .header .sub{font-size:11px;color:#aaa}
     .status{display:flex;align-items:center;gap:6px;font-size:12px}
     .dot{width:8px;height:8px;border-radius:50%;background:#e74c3c}
     .dot.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71}
@@ -18,12 +17,9 @@
     @keyframes blink{50%{opacity:0.3}}
     .bar{background:#fff;border-bottom:1px solid #ccc;padding:8px 20px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .bar label{font-size:11px;font-weight:bold;color:#555}
-    .bar input{border:1px solid #ccc;padding:4px 8px;font-family:inherit;font-size:12px;width:200px}
-    .bar input.sm{width:60px}
+    .bar input{border:1px solid #ccc;padding:4px 8px;font-family:inherit;font-size:12px;width:300px}
     .btn{padding:5px 12px;font-family:inherit;font-size:11px;cursor:pointer;border:1px solid #999;background:#eee}
     .btn:hover{background:#ddd}
-    .btn.green{background:#27ae60;color:#fff;border-color:#219a52}
-    .btn.red{background:#c0392b;color:#fff;border-color:#a93226}
     .btn.blue{background:#2980b9;color:#fff;border-color:#2471a3}
     .main{max-width:1200px;margin:10px auto;padding:0 15px}
     .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:10px}
@@ -37,51 +33,45 @@
     .section{background:#fff;border:1px solid #ccc;margin-bottom:10px}
     .section-head{background:#333;color:#fff;padding:6px 12px;font-size:12px;font-weight:bold;display:flex;justify-content:space-between;align-items:center}
     .section-body{padding:0}
-    .tbl-wrap{max-height:350px;overflow-y:auto}
+    .tbl-wrap{max-height:450px;overflow-y:auto}
     table{width:100%;border-collapse:collapse}
     th{background:#444;color:#fff;padding:4px 6px;font-size:10px;text-transform:uppercase;position:sticky;top:0}
     td{padding:4px 6px;border-bottom:1px solid #eee;text-align:center;font-size:11px}
     tr:hover{background:#f5f5dc}
-    tr.new{animation:flash 1.5s}
+    tr.new{animation:flash 2s}
     @keyframes flash{0%{background:#ffffaa}100%{background:transparent}}
-    .filter-bar{padding:8px 12px;display:flex;gap:8px;align-items:center;border-bottom:1px solid #eee;flex-wrap:wrap}
-    .filter-bar label{font-size:10px;color:#555}
-    .filter-bar input,.filter-bar select{font-family:inherit;font-size:11px;padding:3px 6px;border:1px solid #ccc}
     .empty{padding:30px;text-align:center;color:#999}
-    .device-tag{display:inline-block;padding:1px 6px;background:#2980b9;color:#fff;border-radius:2px;font-size:10px}
+    .device-tag{display:inline-block;padding:1px 6px;background:#f39c12;color:#fff;border-radius:2px;font-size:10px}
     .footer{text-align:center;color:#999;font-size:10px;padding:10px}
+    .dev-counter{display:inline-block;margin:3px 8px 3px 0;padding:4px 10px;background:#1a1a2e;color:#fff;border-radius:3px;font-size:12px}
   </style>
 </head>
 <body>
 
 <div class="header">
   <div>
-    <h1>BTS Point Machine — Central Monitor</h1>
-    <div class="sub">Real-time MQTT Log Database | Multi-Device Support</div>
+    <h1>BTS Point Machine — Firebase Cloud Dashboard</h1>
+    <div class="sub">Auto-syncs historical data & Real-time updates 24/7</div>
   </div>
   <div class="status">
-    <div class="dot" id="dot"></div>
-    <span id="statusText">Disconnected</span>
+    <div class="dot wait" id="dot"></div>
+    <span id="statusText">Connecting Firebase...</span>
   </div>
 </div>
 
 <div class="bar">
-  <label>Broker:</label>
-  <input id="inBroker" value="broker.emqx.io"/>
-  <label>Port:</label>
-  <input id="inPort" value="8084" class="sm"/>
-  <label>Topic:</label>
-  <input id="inTopic" value="bts/signalling/point_monitor/#"/>
-  <button class="btn green" id="btnConn" onclick="toggleConn()">Connect</button>
-  <button class="btn blue" onclick="exportCSV()">CSV Export</button>
-  <button class="btn red" onclick="clearDB()">Clear DB</button>
-  <span style="color:#888;font-size:10px" id="dbCount">DB: 0 records</span>
+  <label>Firebase URL:</label>
+  <input id="inFbUrl" value="https://bts-point-monitor-default-rtdb.asia-southeast1.firebasedatabase.app/" readonly/>
+  <span style="color:#888;font-size:10px;margin-left:10px">(Read-only for demo. Change in code for your project)</span>
+  <div style="flex-grow:1"></div>
+  <button class="btn red" onclick="clearFirebaseData()">Clear DB</button>
+  <button class="btn blue" onclick="exportCSV()">Download CSV</button>
 </div>
 
 <div class="main">
   <!-- Summary Cards -->
   <div class="cards">
-    <div class="card"><div class="label">Total Records (DB)</div><div class="value blue" id="cTotal">0</div></div>
+    <div class="card"><div class="label">Total Records (Cloud)</div><div class="value blue" id="cTotal">0</div></div>
     <div class="card"><div class="label">Devices Tracked</div><div class="value green" id="cDevices">0</div></div>
     <div class="card"><div class="label">Last Device</div><div class="value" id="cLastDev" style="font-size:14px">—</div></div>
     <div class="card"><div class="label">Last Throw Time</div><div class="value orange" id="cLastTime">— sec</div></div>
@@ -90,7 +80,7 @@
 
   <!-- Per-Device Throw Counters -->
   <div class="section">
-    <div class="section-head">Throw Counters Per Device</div>
+    <div class="section-head">Throw Counters Per Device (Computed from Cloud)</div>
     <div class="section-body" style="padding:8px" id="deviceCounters">
       <span style="color:#999">No devices yet</span>
     </div>
@@ -99,335 +89,179 @@
   <!-- Log Table -->
   <div class="section">
     <div class="section-head">
-      <span>Log History (IndexedDB — Persistent)</span>
-      <span id="logInfo">0 shown</span>
-    </div>
-    <div class="filter-bar">
-      <label>Device:</label>
-      <select id="filterDevice" onchange="renderTable()"><option value="">All</option></select>
-      <label>From:</label>
-      <input type="datetime-local" id="filterFrom" onchange="renderTable()"/>
-      <label>To:</label>
-      <input type="datetime-local" id="filterTo" onchange="renderTable()"/>
-      <button class="btn" onclick="resetFilters()">Reset</button>
+      <span>Log History (Cloud Database)</span>
     </div>
     <div class="section-body">
       <div class="tbl-wrap" id="tblWrap">
         <table>
           <thead><tr>
-            <th>#</th><th>Timestamp</th><th>Device</th><th>Location</th>
+            <th>Cloud ID</th><th>Received At</th><th>Device</th><th>Location</th>
             <th>Throw#</th><th>Time(sec)</th><th>Peak I(A)</th><th>Avg V(V)</th><th>Samples</th>
           </tr></thead>
           <tbody id="tblBody"></tbody>
         </table>
-        <div class="empty" id="emptyMsg">No data. Connect to MQTT and trigger a throw.</div>
+        <div class="empty" id="emptyMsg">Connecting to Cloud...</div>
       </div>
     </div>
   </div>
 </div>
 
-<div class="footer">Data stored in browser IndexedDB — persists across page reloads | BTS Signalling Division</div>
+<div class="footer">Powered by Firebase Realtime Database | BTS Signalling Division</div>
 
-<script>
-// ============================================================
-// IndexedDB Database
-// ============================================================
-const DB_NAME = 'PointMonitorDB';
-const DB_VER = 1;
-const STORE = 'throw_logs';
-let db = null;
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+  import { getDatabase, ref, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-database.js";
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VER);
-    req.onupgradeneeded = (e) => {
-      const d = e.target.result;
-      if (!d.objectStoreNames.contains(STORE)) {
-        const s = d.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
-        s.createIndex('device_id', 'device_id', { unique: false });
-        s.createIndex('received_at', 'received_at', { unique: false });
-      }
-    };
-    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
-    req.onerror = (e) => reject(e);
-  });
-}
-
-function addRecord(data) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).add(data);
-    tx.oncomplete = () => resolve();
-    tx.onerror = (e) => reject(e);
-  });
-}
-
-function getAllRecords() {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).getAll();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = (e) => reject(e);
-  });
-}
-
-function clearAllRecords() {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).clear();
-    tx.oncomplete = () => resolve();
-    tx.onerror = (e) => reject(e);
-  });
-}
-
-function countRecords() {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).count();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = (e) => reject(e);
-  });
-}
-
-// ============================================================
-// State
-// ============================================================
-let mqttClient = null;
-let isConnected = false;
-let allRecords = [];
-let deviceMap = {};  // device_id -> throw count
-
-// ============================================================
-// MQTT
-// ============================================================
-function toggleConn() {
-  isConnected ? disconnect() : connect();
-}
-
-function connect() {
-  const broker = document.getElementById('inBroker').value.trim();
-  const port = document.getElementById('inPort').value.trim();
-  const topic = document.getElementById('inTopic').value.trim();
-  if (!broker||!port||!topic) return;
-
-  setStatus('wait', 'Connecting...');
-  const url = `wss://${broker}:${port}/mqtt`;
-  const cid = 'dashboard_' + Math.random().toString(16).substr(2,8);
-
-  try {
-    mqttClient = mqtt.connect(url, { clientId:cid, clean:true, connectTimeout:10000, reconnectPeriod:5000 });
-    mqttClient.on('connect', () => {
-      setStatus('on', 'Connected');
-      mqttClient.subscribe(topic, {qos:0}, (err) => {
-        if(!err) console.log('Subscribed:', topic);
-      });
-      document.getElementById('btnConn').textContent = 'Disconnect';
-      document.getElementById('btnConn').className = 'btn red';
-      isConnected = true;
-    });
-    mqttClient.on('message', (t, msg) => {
-      try { handleMsg(JSON.parse(msg.toString()), t); } catch(e) { console.error(e); }
-    });
-    mqttClient.on('error', (e) => { setStatus('off','Error'); console.error(e); });
-    mqttClient.on('close', () => { if(isConnected){setStatus('off','Disconnected');} });
-    mqttClient.on('reconnect', () => setStatus('wait','Reconnecting...'));
-  } catch(e) { setStatus('off','Failed'); console.error(e); }
-}
-
-function disconnect() {
-  if (mqttClient) { mqttClient.end(true); mqttClient=null; }
-  isConnected = false;
-  setStatus('off', 'Disconnected');
-  document.getElementById('btnConn').textContent = 'Connect';
-  document.getElementById('btnConn').className = 'btn green';
-}
-
-function setStatus(s, t) {
-  const dot = document.getElementById('dot');
-  dot.className = 'dot' + (s==='on'?' on':s==='wait'?' wait':'');
-  document.getElementById('statusText').textContent = t;
-}
-
-// ============================================================
-// Handle Incoming MQTT Data
-// ============================================================
-async function handleMsg(data, topic) {
-  const record = {
-    received_at: new Date().toISOString(),
-    received_local: new Date().toLocaleString('sv-SE'),
-    topic: topic,
-    device_id: data.device_id || 'Unknown',
-    location: data.location || '',
-    timestamp: data.timestamp || '',
-    throw_count: data.throw_count || 0,
-    status: data.status || '',
-    throw_time_sec: parseFloat(data.throw_time_sec) || 0,
-    peak_current_A: parseFloat(data.peak_current_A) || 0,
-    avg_voltage_V: parseFloat(data.avg_voltage_V) || 0,
-    sig_count: (data.current_signature||[]).length,
-    current_signature: (data.current_signature||[]).map(Number)
+  // ==========================================
+  // CONFIGURATION: PUT YOUR FIREBASE URL HERE
+  // ==========================================
+  const FIREBASE_DB_URL = "https://bts-point-monitor-default-rtdb.asia-southeast1.firebasedatabase.app/";
+  
+  const firebaseConfig = {
+    databaseURL: FIREBASE_DB_URL
   };
 
-  // Save to IndexedDB
-  await addRecord(record);
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const logsRef = ref(db, 'logs');
 
-  // Refresh data
-  await loadAllRecords();
-  renderTable();
-  updateCards(record);
-  updateDeviceCounters();
-}
+  let allRecords = [];
+  let isFirstLoad = true;
+  let previousCount = 0;
 
-// ============================================================
-// Load & Render
-// ============================================================
-async function loadAllRecords() {
-  allRecords = await getAllRecords();
-  const cnt = allRecords.length;
-  document.getElementById('dbCount').textContent = `DB: ${cnt} records`;
-  document.getElementById('cTotal').textContent = cnt;
-
-  // Update device filter dropdown
-  const devSet = new Set(allRecords.map(r => r.device_id));
-  deviceMap = {};
-  allRecords.forEach(r => {
-    deviceMap[r.device_id] = (deviceMap[r.device_id]||0) + 1;
-  });
-  document.getElementById('cDevices').textContent = devSet.size;
-
-  const sel = document.getElementById('filterDevice');
-  const curVal = sel.value;
-  sel.innerHTML = '<option value="">All Devices</option>';
-  devSet.forEach(d => {
-    const opt = document.createElement('option');
-    opt.value = d; opt.textContent = d + ' (' + deviceMap[d] + ')';
-    sel.appendChild(opt);
-  });
-  sel.value = curVal;
-}
-
-function renderTable() {
-  const devFilter = document.getElementById('filterDevice').value;
-  const fromFilter = document.getElementById('filterFrom').value;
-  const toFilter = document.getElementById('filterTo').value;
-
-  let filtered = allRecords.filter(r => {
-    if (devFilter && r.device_id !== devFilter) return false;
-    if (fromFilter) {
-      const rDate = new Date(r.received_at);
-      const fDate = new Date(fromFilter);
-      if (rDate < fDate) return false;
+  // Listen to data changes in Real-time
+  onValue(logsRef, (snapshot) => {
+    document.getElementById('dot').className = 'dot on';
+    document.getElementById('statusText').textContent = 'Live (Cloud Connected)';
+    
+    const data = snapshot.val();
+    allRecords = [];
+    
+    if (data) {
+      // Convert Firebase object into array
+      for (let key in data) {
+        let r = data[key];
+        r.firebase_id = key;
+        allRecords.push(r);
+      }
     }
-    if (toFilter) {
-      const rDate = new Date(r.received_at);
-      const tDate = new Date(toFilter);
-      if (rDate > tDate) return false;
+    
+    // Check if new data arrived (to trigger flash animation)
+    let isNewData = false;
+    if (!isFirstLoad && allRecords.length > previousCount) {
+      isNewData = true;
     }
-    return true;
+    previousCount = allRecords.length;
+    isFirstLoad = false;
+    
+    processData(isNewData);
+  }, (error) => {
+    document.getElementById('dot').className = 'dot';
+    document.getElementById('statusText').textContent = 'Error: ' + error.message;
+    document.getElementById('emptyMsg').textContent = 'Failed to read database rules. Did you set them to true?';
   });
 
-  // Newest first
-  filtered.sort((a,b) => new Date(b.received_at) - new Date(a.received_at));
+  // Process and Render Data
+  function processData(isNewData) {
+    const cnt = allRecords.length;
+    document.getElementById('cTotal').textContent = cnt;
+    
+    if(cnt === 0) {
+      document.getElementById('emptyMsg').style.display = 'block';
+      document.getElementById('emptyMsg').textContent = 'No data found in Cloud Database.';
+      return;
+    } else {
+      document.getElementById('emptyMsg').style.display = 'none';
+    }
 
-  const tbody = document.getElementById('tblBody');
-  tbody.innerHTML = '';
-  document.getElementById('emptyMsg').style.display = filtered.length ? 'none' : 'block';
-  document.getElementById('logInfo').textContent = filtered.length + ' shown';
+    // Sort oldest first by Firebase Push ID (which is chronologically ordered automatically by Firebase)
+    allRecords.sort((a, b) => {
+      if (a.firebase_id < b.firebase_id) return -1;
+      if (a.firebase_id > b.firebase_id) return 1;
+      return 0;
+    });
 
-  filtered.forEach((r, i) => {
-    const tr = document.createElement('tr');
-    if (i === 0 && !devFilter && !fromFilter && !toFilter) tr.className = 'new';
-    tr.innerHTML = `
-      <td>${r.id||''}</td>
-      <td>${r.timestamp || r.received_local}</td>
-      <td><span class="device-tag">${r.device_id}</span></td>
-      <td style="font-size:10px">${r.location}</td>
-      <td>${r.throw_count}</td>
-      <td>${r.throw_time_sec.toFixed(3)}</td>
-      <td>${r.peak_current_A.toFixed(2)}</td>
-      <td>${r.avg_voltage_V.toFixed(1)}</td>
-      <td>${r.sig_count}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+    // Calculate Absolute Throw Count for each device based on Database History
+    let deviceMap = {};
+    allRecords.forEach(r => {
+      let d = r.device_id || 'Unknown';
+      deviceMap[d] = (deviceMap[d] || 0) + 1;
+      r.absolute_throw = deviceMap[d]; // 1, 2, 3...
+    });
 
-  // Auto scroll
-  const wrap = document.getElementById('tblWrap');
-  wrap.scrollTop = 0;
-}
+    // Reverse to show newest first in the table
+    allRecords.reverse();
 
-function updateCards(r) {
-  document.getElementById('cLastDev').textContent = r.device_id;
-  document.getElementById('cLastTime').textContent = r.throw_time_sec.toFixed(3) + ' sec';
-  document.getElementById('cLastPeak').textContent = r.peak_current_A.toFixed(2) + ' A';
-}
+    document.getElementById('cDevices').textContent = Object.keys(deviceMap).length;
+    
+    // Update Devices counter UI
+    const devEl = document.getElementById('deviceCounters');
+    let html = '';
+    for (const [dev, count] of Object.entries(deviceMap)) {
+      html += `<span class="dev-counter"><b>${dev}</b>: ${count} throws</span>`;
+    }
+    devEl.innerHTML = html;
 
-function updateDeviceCounters() {
-  const el = document.getElementById('deviceCounters');
-  if (Object.keys(deviceMap).length === 0) {
-    el.innerHTML = '<span style="color:#999">No devices yet</span>';
-    return;
+    // Update Cards with latest record
+    const latest = allRecords[0];
+    document.getElementById('cLastDev').textContent = latest.device_id || '—';
+    document.getElementById('cLastTime').textContent = parseFloat(latest.throw_time_sec||0).toFixed(3) + ' sec';
+    document.getElementById('cLastPeak').textContent = parseFloat(latest.peak_current_A||0).toFixed(2) + ' A';
+
+    // Render Table
+    const tbody = document.getElementById('tblBody');
+    tbody.innerHTML = '';
+    
+    allRecords.forEach((r, i) => {
+      const tr = document.createElement('tr');
+      // Highlight the first row if new data just arrived
+      if (i === 0 && isNewData) tr.className = 'new';
+      
+      tr.innerHTML = `
+        <td style="font-size:9px;color:#888">${r.firebase_id}</td>
+        <td>${r.received_at || r.timestamp}</td>
+        <td><span class="device-tag">${r.device_id}</span></td>
+        <td style="font-size:10px">${r.location || ''}</td>
+        <td>${r.absolute_throw}</td>
+        <td>${parseFloat(r.throw_time_sec||0).toFixed(3)}</td>
+        <td>${parseFloat(r.peak_current_A||0).toFixed(2)}</td>
+        <td>${parseFloat(r.avg_voltage_V||0).toFixed(1)}</td>
+        <td>${(r.current_signature||[]).length}</td>
+      `;
+      tbody.appendChild(tr);
+    });
   }
-  let html = '';
-  for (const [dev, cnt] of Object.entries(deviceMap)) {
-    html += `<span style="display:inline-block;margin:3px 8px 3px 0;padding:4px 10px;background:#1a1a2e;color:#fff;border-radius:3px;font-size:12px">
-      <b>${dev}</b>: ${cnt} throws</span>`;
-  }
-  el.innerHTML = html;
-}
 
-function resetFilters() {
-  document.getElementById('filterDevice').value = '';
-  document.getElementById('filterFrom').value = '';
-  document.getElementById('filterTo').value = '';
-  renderTable();
-}
+  // Make exportCSV available globally
+  window.exportCSV = function() {
+    if (allRecords.length === 0) { alert('No data to export'); return; }
+    let csv = 'Firebase_ID,Received_At,Device_ID,Location,Throw_Count(DB),Status,Throw_Time_sec,Peak_Current_A,Avg_Voltage_V,Current_Signature\r\n';
+    allRecords.forEach(r => {
+      let sig = r.current_signature ? r.current_signature.join(',') : '';
+      csv += `${r.firebase_id},${r.received_at||r.timestamp},${r.device_id},"${r.location||''}",${r.absolute_throw},${r.status||''},${parseFloat(r.throw_time_sec||0).toFixed(3)},${parseFloat(r.peak_current_A||0).toFixed(2)},${parseFloat(r.avg_voltage_V||0).toFixed(1)},"[${sig}]"\r\n`;
+    });
+    const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bts_cloud_export_' + new Date().toISOString().replace(/[:.]/g,'-').substr(0,19) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-// ============================================================
-// CSV Export (from IndexedDB)
-// ============================================================
-function exportCSV() {
-  if (allRecords.length === 0) { alert('No data to export'); return; }
-  let csv = 'ID,Received_At,Device_ID,Location,Timestamp,Throw_Count,Status,Throw_Time_sec,Peak_Current_A,Avg_Voltage_V,Sig_Samples,Current_Signature\r\n';
-  allRecords.forEach(r => {
-    csv += `${r.id||''},${r.received_at},${r.device_id},"${r.location}",${r.timestamp},${r.throw_count},${r.status},${r.throw_time_sec.toFixed(3)},${r.peak_current_A.toFixed(2)},${r.avg_voltage_V.toFixed(1)},${r.sig_count},"[${r.current_signature.join(',')}]"\r\n`;
-  });
-  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'point_monitor_db_' + new Date().toISOString().replace(/[:.]/g,'-').substr(0,19) + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// ============================================================
-// Clear Database
-// ============================================================
-async function clearDB() {
-  if (!confirm('Clear ALL records from database?')) return;
-  await clearAllRecords();
-  allRecords = [];
-  deviceMap = {};
-  document.getElementById('cTotal').textContent = '0';
-  document.getElementById('cDevices').textContent = '0';
-  document.getElementById('cLastDev').textContent = '—';
-  document.getElementById('cLastTime').textContent = '— sec';
-  document.getElementById('cLastPeak').textContent = '— A';
-  document.getElementById('dbCount').textContent = 'DB: 0 records';
-  document.getElementById('deviceCounters').innerHTML = '<span style="color:#999">No devices yet</span>';
-  renderTable();
-}
-
-// ============================================================
-// Init
-// ============================================================
-(async function init() {
-  await openDB();
-  await loadAllRecords();
-  updateDeviceCounters();
-  renderTable();
-})();
+  // Clear Database function
+  window.clearFirebaseData = async function() {
+    if (confirm('คำเตือน: คุณต้องการลบข้อมูลทั้งหมดใน Firebase ทิ้งอย่างถาวรใช่หรือไม่?\n\n(ควร Export CSV เก็บไว้ก่อนลบ)')) {
+      try {
+        await remove(logsRef);
+        alert('ลบข้อมูลใน Cloud สำเร็จ!');
+      } catch (error) {
+        alert('เกิดข้อผิดพลาดในการลบ: ' + error.message);
+      }
+    }
+  };
 </script>
 </body>
 </html>
